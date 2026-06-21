@@ -23,11 +23,46 @@ std::string get_executable_path(const std::string& command_name) {
   return "";
 }
 
-void typeCommand(std::string input, const std::array<std::string, 10> &built_in_commands) {
-  if (input.length() <= 5) return;
-  std::string cmd = input.substr(5);
+std::vector<std::string> parse_arguments(const std::string& input) {
+  std::vector<std::string> args;
+  std::string current_arg = "";
+  bool in_single_quote = false;
+  bool has_chars = false;
+
+  for (size_t i = 0; i < input.size(); ++i) {
+    char c = input[i];
+    if (in_single_quote) {
+      if (c == '\'') {
+        in_single_quote = false;
+      } else {
+        current_arg += c;
+        has_chars = true;
+      }
+    } else {
+      if (c == '\'') {
+        in_single_quote = true;
+        has_chars = true;
+      } else if (c == ' ' || c == '\t') {
+        if (has_chars) {
+          args.push_back(current_arg);
+          current_arg = "";
+          has_chars = false;
+        }
+      } else {
+        current_arg += c;
+        has_chars = true;
+      }
+    }
+  }
+  if (has_chars) {
+    args.push_back(current_arg);
+  }
+  return args;
+}
+
+void typeCommand(const std::string& cmd, const std::vector<std::string> &built_in_commands) {
   bool found = false;
-  for (int i = 0; i < built_in_commands.size(); i++) {
+  for (size_t i = 0; i < built_in_commands.size(); i++) {
     if (built_in_commands[i] == cmd) {
       found = true;
       std::cout << cmd << " is a shell builtin" << std::endl;
@@ -47,7 +82,7 @@ void typeCommand(std::string input, const std::array<std::string, 10> &built_in_
 int main() {
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
-  std::array<std::string, 10> built_in_commands = {"exit", "echo", "type", "pwd", "cd"};
+  std::vector<std::string> built_in_commands = {"exit", "echo", "type", "pwd", "cd"};
   std::string command;
 
   while (true) {
@@ -55,18 +90,31 @@ int main() {
     if (!std::getline(std::cin, command)) break;
     if (command.empty()) continue;
 
-    if (command == "exit") {
+    std::vector<std::string> args = parse_arguments(command);
+    if (args.empty()) continue;
+
+    std::string cmd_name = args[0];
+
+    if (cmd_name == "exit") {
       break;
-    } else if (command.substr(0, 5) == "echo ") {
-      std::cout << command.substr(5) << std::endl;
-    } else if (command.substr(0, 5) == "type ") {
-      typeCommand(command, built_in_commands);
-    } else if (command == "pwd") {
+    } else if (cmd_name == "echo") {
+      for (size_t i = 1; i < args.size(); ++i) {
+        std::cout << args[i] << (i + 1 < args.size() ? " " : "");
+      }
+      std::cout << std::endl;
+    } else if (cmd_name == "type") {
+      if (args.size() > 1) {
+        typeCommand(args[1], built_in_commands);
+      }
+    } else if (cmd_name == "pwd") {
       std::cout << std::filesystem::current_path().string() << std::endl;
-    } else if (command.substr(0, 3) == "cd ") {
-      std::string orig_path = command.substr(3);
+    } else if (cmd_name == "cd") {
+      std::string orig_path = "";
+      if (args.size() > 1) {
+        orig_path = args[1];
+      }
       std::string path = orig_path;
-      if (path == "~") {
+      if (path.empty() || path == "~") {
         char* home = getenv("HOME");
         if (home) {
           path = home;
@@ -82,24 +130,9 @@ int main() {
       if (ec) {
         std::cout << "cd: " << orig_path << ": No such file or directory" << std::endl;
       }
-    } else if (command == "cd") {
-      char* home = getenv("HOME");
-      if (home) {
-        std::error_code ec;
-        std::filesystem::current_path(home, ec);
-      }
     } else {
-      std::string cmd_name = command.substr(0, command.find(' '));
       std::string exec_path = get_executable_path(cmd_name);
-      
       if (!exec_path.empty()) {
-        std::vector<std::string> args;
-        std::istringstream iss(command);
-        std::string arg;
-        while (iss >> arg) {
-          args.push_back(arg);
-        }
-        
         std::vector<char*> c_args;
         for (auto& a : args) {
           c_args.push_back(const_cast<char*>(a.c_str()));
@@ -112,12 +145,11 @@ int main() {
           execv(exec_path.c_str(), c_args.data());
           exit(1); // exit if execv fails
         } else if (pid > 0) {
-          
           int status;
           waitpid(pid, &status, 0);
         }
       } else {
-        std::cout << command << ": command not found" << std::endl;
+        std::cout << cmd_name << ": command not found" << std::endl;
       }
     }
   }
