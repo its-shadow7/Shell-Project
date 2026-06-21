@@ -27,6 +27,7 @@ std::vector<std::string> parse_arguments(const std::string& input) {
   std::vector<std::string> args;
   std::string current_arg = "";
   bool in_single_quote = false;
+  bool in_double_quote = false;
   bool has_chars = false;
 
   for (size_t i = 0; i < input.size(); ++i) {
@@ -38,9 +39,19 @@ std::vector<std::string> parse_arguments(const std::string& input) {
         current_arg += c;
         has_chars = true;
       }
+    } else if (in_double_quote) {
+      if (c == '"') {
+        in_double_quote = false;
+      } else {
+        current_arg += c;
+        has_chars = true;
+      }
     } else {
       if (c == '\'') {
         in_single_quote = true;
+        has_chars = true;
+      } else if (c == '"') {
+        in_double_quote = true;
         has_chars = true;
       } else if (c == ' ' || c == '\t') {
         if (has_chars) {
