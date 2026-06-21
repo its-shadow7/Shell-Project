@@ -64,11 +64,23 @@ int main() {
     } else if (command == "pwd") {
       std::cout << std::filesystem::current_path().string() << std::endl;
     } else if (command.substr(0, 3) == "cd ") {
-      std::string path = command.substr(3);
+      std::string orig_path = command.substr(3);
+      std::string path = orig_path;
+      if (path == "~") {
+        char* home = getenv("HOME");
+        if (home) {
+          path = home;
+        }
+      } else if (path.rfind("~/", 0) == 0) {
+        char* home = getenv("HOME");
+        if (home) {
+          path = std::string(home) + path.substr(1);
+        }
+      }
       std::error_code ec;
       std::filesystem::current_path(path, ec);
       if (ec) {
-        std::cout << "cd: " << path << ": No such file or directory" << std::endl;
+        std::cout << "cd: " << orig_path << ": No such file or directory" << std::endl;
       }
     } else if (command == "cd") {
       char* home = getenv("HOME");
