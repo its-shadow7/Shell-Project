@@ -118,6 +118,7 @@ struct RedirectionInfo {
   size_t op_start = std::string::npos;
   size_t op_len = 0;
   bool is_stderr = false;
+  bool is_append = false;
 };
 
 RedirectionInfo find_redirection(const std::string& input) {
@@ -161,18 +162,39 @@ RedirectionInfo find_redirection(const std::string& input) {
     if (input[i] == '>' && is_unquoted[i]) {
       RedirectionInfo info;
       info.has_redirect = true;
-      if (i > 0 && input[i - 1] == '1' && is_unquoted[i - 1]) {
-        info.op_start = i - 1;
-        info.op_len = 2;
-        info.is_stderr = false;
-      } else if (i > 0 && input[i - 1] == '2' && is_unquoted[i - 1]) {
-        info.op_start = i - 1;
-        info.op_len = 2;
-        info.is_stderr = true;
+      
+      // Check if it's '>>'
+      if (i + 1 < input.size() && input[i + 1] == '>' && is_unquoted[i + 1]) {
+        info.is_append = true;
+        if (i > 0 && input[i - 1] == '1' && is_unquoted[i - 1]) {
+          info.op_start = i - 1;
+          info.op_len = 3;
+          info.is_stderr = false;
+        } else if (i > 0 && input[i - 1] == '2' && is_unquoted[i - 1]) {
+          info.op_start = i - 1;
+          info.op_len = 3;
+          info.is_stderr = true;
+        } else {
+          info.op_start = i;
+          info.op_len = 2;
+          info.is_stderr = false;
+        }
       } else {
-        info.op_start = i;
-        info.op_len = 1;
-        info.is_stderr = false;
+        // Single '>'
+        info.is_append = false;
+        if (i > 0 && input[i - 1] == '1' && is_unquoted[i - 1]) {
+          info.op_start = i - 1;
+          info.op_len = 2;
+          info.is_stderr = false;
+        } else if (i > 0 && input[i - 1] == '2' && is_unquoted[i - 1]) {
+          info.op_start = i - 1;
+          info.op_len = 2;
+          info.is_stderr = true;
+        } else {
+          info.op_start = i;
+          info.op_len = 1;
+          info.is_stderr = false;
+        }
       }
       return info;
     }
@@ -186,9 +208,15 @@ struct CoutRedirector {
   std::ofstream out_file;
   bool active;
 
-  CoutRedirector(bool active, const std::string& filepath) : active(active), org_buf(nullptr) {
+  CoutRedirector(bool active, const std::string& filepath, bool append = false) : active(active), org_buf(nullptr) {
     if (active) {
-      out_file.open(filepath, std::ios::out | std::ios::trunc);
+      auto mode = std::ios::out;
+      if (append) {
+        mode |= std::ios::app;
+      } else {
+        mode |= std::ios::trunc;
+      }
+      out_file.open(filepath, mode);
       if (out_file.is_open()) {
         org_buf = std::cout.rdbuf();
         std::cout.rdbuf(out_file.rdbuf());
@@ -208,9 +236,15 @@ struct CerrRedirector {
   std::ofstream out_file;
   bool active;
 
-  CerrRedirector(bool active, const std::string& filepath) : active(active), org_buf(nullptr) {
+  CerrRedirector(bool active, const std::string& filepath, bool append = false) : active(active), org_buf(nullptr) {
     if (active) {
-      out_file.open(filepath, std::ios::out | std::ios::trunc);
+      auto mode = std::ios::out;
+      if (append) {
+        mode |= std::ios::app;
+      } else {
+        mode |= std::ios::trunc;
+      }
+      out_file.open(filepath, mode);
       if (out_file.is_open()) {
         org_buf = std::cerr.rdbuf();
         std::cerr.rdbuf(out_file.rdbuf());
@@ -238,6 +272,7 @@ int main() {
 
     bool do_redirect = false;
     bool redirect_stderr = false;
+    bool redirect_append = false;
     std::string redirect_file = "";
     std::vector<std::string> args;
 
@@ -251,6 +286,7 @@ int main() {
         redirect_file = right_args[0];
         do_redirect = true;
         redirect_stderr = redir.is_stderr;
+        redirect_append = redir.is_append;
         args = left_args;
         for (size_t i = 1; i < right_args.size(); ++i) {
           args.push_back(right_args[i]);
@@ -274,8 +310,8 @@ int main() {
 
     std::string cmd_name = args[0];
 
-    CoutRedirector redirect_out(do_redirect && !redirect_stderr, redirect_file);
-    CerrRedirector redirect_err(do_redirect && redirect_stderr, redirect_file);
+    CoutRedirector redirect_out(do_redirect && !redirect_stderr, redirect_file, redirect_append);
+    CerrRedirector redirect_err(do_redirect && redirect_stderr, redirect_file, redirect_append);
 
     bool is_builtin = false;
     for (const auto& built_in : built_in_commands) {
@@ -335,7 +371,13 @@ int main() {
         if (pid == 0) {
           // child process
           if (do_redirect) {
-            int fd = open(redirect_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            int flags = O_WRONLY | O_CREAT;
+            if (redirect_append) {
+              flags |= O_APPEND;
+            } else {
+              flags |= O_TRUNC;
+            }
+            int fd = open(redirect_file.c_str(), flags, 0644);
             if (fd >= 0) {
               if (redirect_stderr) {
                 dup2(fd, STDERR_FILENO);
