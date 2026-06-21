@@ -47,7 +47,13 @@ std::vector<std::string> parse_arguments(const std::string& input) {
         has_chars = true;
       }
     } else {
-      if (c == '\'') {
+      if (c == '\\') {
+        if (i + 1 < input.size()) {
+          current_arg += input[i + 1];
+          has_chars = true;
+          ++i;
+        }
+      } else if (c == '\'') {
         in_single_quote = true;
         has_chars = true;
       } else if (c == '"') {
