@@ -40,7 +40,22 @@ std::vector<std::string> parse_arguments(const std::string& input) {
         has_chars = true;
       }
     } else if (in_double_quote) {
-      if (c == '"') {
+      if (c == '\\') {
+        if (i + 1 < input.size()) {
+          char next = input[i + 1];
+          if (next == '"' || next == '\\' || next == '$' || next == '`') {
+            current_arg += next;
+            has_chars = true;
+            ++i;
+          } else {
+            current_arg += c;
+            has_chars = true;
+          }
+        } else {
+          current_arg += c;
+          has_chars = true;
+        }
+      } else if (c == '"') {
         in_double_quote = false;
       } else {
         current_arg += c;
