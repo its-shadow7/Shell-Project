@@ -44,7 +44,6 @@ void typeCommand(std::string input, const std::array<std::string, 10> &built_in_
 }
 
 int main() {
-  // Flush after every std::cout / std:cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
   std::array<std::string, 10> built_in_commands = {"exit", "echo", "type"};
@@ -85,7 +84,7 @@ int main() {
           execv(exec_path.c_str(), c_args.data());
           exit(1); // exit if execv fails
         } else if (pid > 0) {
-          // parent process
+          
           int status;
           waitpid(pid, &status, 0);
         }
