@@ -47,7 +47,7 @@ void typeCommand(std::string input, const std::array<std::string, 10> &built_in_
 int main() {
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
-  std::array<std::string, 10> built_in_commands = {"exit", "echo", "type", "pwd"};
+  std::array<std::string, 10> built_in_commands = {"exit", "echo", "type", "pwd", "cd"};
   std::string command;
 
   while (true) {
@@ -63,6 +63,19 @@ int main() {
       typeCommand(command, built_in_commands);
     } else if (command == "pwd") {
       std::cout << std::filesystem::current_path().string() << std::endl;
+    } else if (command.substr(0, 3) == "cd ") {
+      std::string path = command.substr(3);
+      std::error_code ec;
+      std::filesystem::current_path(path, ec);
+      if (ec) {
+        std::cout << "cd: " << path << ": No such file or directory" << std::endl;
+      }
+    } else if (command == "cd") {
+      char* home = getenv("HOME");
+      if (home) {
+        std::error_code ec;
+        std::filesystem::current_path(home, ec);
+      }
     } else {
       std::string cmd_name = command.substr(0, command.find(' '));
       std::string exec_path = get_executable_path(cmd_name);
